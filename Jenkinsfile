@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        RECIPIENTS          = 'maheshbabuya@gmail.com'
+        RECIPIENTS          = 'maheshbabuyarramsetti09@gmail.com'
         GIT_REPO            = 'https://github.com/Mahesh1-code141/Restaurant.git'
         GIT_BRANCH          = 'main'
         KUBE_NAMESPACE      = 'mahesh'
