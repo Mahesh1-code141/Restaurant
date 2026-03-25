@@ -6,7 +6,7 @@ pipeline {
         GIT_REPO = 'https://github.com/Mahesh1-code141/Restaurant.git'
         GIT_BRANCH = 'main'
         KUBE_NAMESPACE = 'mahesh'
-        DOCKER_REGISTRY = 'docker.io/mahesh2452/restaurant'
+        DOCKER_REGISTRY = 'docker.io/mahesh2452/restaurant:1'
         DOCKER_IMAGE = 'restaurant'
         DOCKER_CREDENTIALS_ID = 'Docker_CRED'
     }
