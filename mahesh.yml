@@ -1,4 +1,4 @@
-cat <<EOF | kubectl apply -f -
+kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,12 +19,12 @@ spec:
         image: docker.io/mahesh2452/restaurant:latest
         ports:
         - containerPort: 80
-EOF
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: restaurant-service
+  namespace: mahesh
 spec:
   type: LoadBalancer
   selector:
