@@ -78,7 +78,7 @@ metadata:
   name: ${DOCKER_IMAGE}-deployment
   namespace: ${KUBE_NAMESPACE}
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: ${DOCKER_IMAGE}
