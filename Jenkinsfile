@@ -63,15 +63,15 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
-            steps {
-                script {
-                    echo 'Deploying to Kubernetes...'
+       stage('Deploy to Kubernetes') {
+    steps {
+        script {
+            echo 'Deploying to Kubernetes...'
 
-                    // Check if deployment exists; if not, create dynamically
-                    sh """
-                        kubectl get deployment ${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE} || \
-                        kubectl apply -f - <<EOF
+            sh """
+                kubectl get namespace ${KUBE_NAMESPACE} || kubectl create namespace ${KUBE_NAMESPACE}
+
+                kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -90,54 +90,27 @@ spec:
       containers:
       - name: ${DOCKER_IMAGE}
         image: ${DOCKER_REGISTRY}:${BUILD_NUMBER}
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${DOCKER_IMAGE}-service
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  type: NodePort
+  selector:
+    app: ${DOCKER_IMAGE}
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30007
 EOF
-                    """
+            """
 
-                    // Update image in case deployment already existed
-                    sh """
-                        kubectl set image deployment/${DOCKER_IMAGE}-deployment \
-                            ${DOCKER_IMAGE}=${DOCKER_REGISTRY}:${BUILD_NUMBER} \
-                            -n ${KUBE_NAMESPACE}
-                    """
-
-                    // Wait for rollout and capture status
-                    def rolloutStatus = sh(
-                        script: "kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}",
-                        returnStdout: true
-                    ).trim()
-
-                    echo "Rollout Status: ${rolloutStatus}"
-
-                    // Post-deployment email
-                    emailext (
-                        subject: "Deployment Complete: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
-                        body:    "Deployment finished successfully.\n\nRollout Status:\n${rolloutStatus}",
-                        to:      "${RECIPIENTS}"
-                    )
-                }
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "Pipeline completed successfully."
-        }
-        failure {
-            emailext (
-                subject: "Jenkins Job '${env.JOB_NAME}' Failed",
-                body:    "Alert! Job '${env.JOB_NAME}' (#${env.BUILD_NUMBER}) failed.\n\nCheck console output at ${env.BUILD_URL}",
-                to:      "${RECIPIENTS}"
-            )
-        }
-        unstable {
-            emailext (
-                subject: "Jenkins Job '${env.JOB_NAME}' Unstable",
-                body:    "Job '${env.JOB_NAME}' (#${env.BUILD_NUMBER}) is unstable.\n\nCheck console output at ${env.BUILD_URL}",
-                to:      "${RECIPIENTS}"
-            )
+            sh "kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}"
         }
     }
 }
