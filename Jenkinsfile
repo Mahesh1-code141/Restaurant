@@ -28,7 +28,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Building Docker image...'
-                sh "docker build -t restaurant:${BUILD_NUMBER} ."
+                sh "docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} ."
             }
         }
 
@@ -44,7 +44,7 @@ pipeline {
                         echo "\$DOCKER_PASS" | docker login ${DOCKER_LOGIN_SERVER} \
                             -u "\$DOCKER_USER" --password-stdin
 
-                        docker tag restaurant:${BUILD_NUMBER} \
+                        docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} \
                             ${DOCKER_REGISTRY}:${BUILD_NUMBER}
 
                         docker push ${DOCKER_REGISTRY}:${BUILD_NUMBER}
@@ -56,8 +56,8 @@ pipeline {
         stage('Pre-Deployment Notification') {
             steps {
                 emailext (
-                    subject: "Deployment Starting: restaurant:${BUILD_NUMBER}",
-                    body:    "Deployment of restaurant:${BUILD_NUMBER} to Kubernetes namespace '${KUBE_NAMESPACE}' is starting.",
+                    subject: "Deployment Starting: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
+                    body:    "Deployment of ${DOCKER_IMAGE}:${BUILD_NUMBER} to Kubernetes namespace '${KUBE_NAMESPACE}' is starting.",
                     to:      "${RECIPIENTS}"
                 )
             }
@@ -70,54 +70,41 @@ pipeline {
 
                     // Check if deployment exists; if not, create dynamically
                     sh """
-                        kubectl get deployment restaurant-deployment -n ${KUBE_NAMESPACE} || \
+                        kubectl get deployment ${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE} || \
                         kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: restaurant-deployment
+  name: ${DOCKER_IMAGE}-deployment
   namespace: ${KUBE_NAMESPACE}
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
-      app: restaurant
+      app: ${DOCKER_IMAGE}
   template:
     metadata:
       labels:
-        app: restaurant
+        app: ${DOCKER_IMAGE}
     spec:
       containers:
-      - name: restaurant
+      - name: ${DOCKER_IMAGE}
         image: ${DOCKER_REGISTRY}:${BUILD_NUMBER}
         ports:
         - containerPort: 80
 EOF
-apiVersion: v1
-kind: Service
-metadata:
-  name: restaurant-service
-  namespace: mahesh
-spec:
-  type: LoadBalancer
-  selector:
-    app: restaurant
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 80
                     """
 
                     // Update image in case deployment already existed
                     sh """
-                        kubectl set image deployment/restaurant-deployment \
-                            restaurant=${DOCKER_REGISTRY}:${BUILD_NUMBER} \
+                        kubectl set image deployment/${DOCKER_IMAGE}-deployment \
+                            ${DOCKER_IMAGE}=${DOCKER_REGISTRY}:${BUILD_NUMBER} \
                             -n ${KUBE_NAMESPACE}
                     """
 
                     // Wait for rollout and capture status
                     def rolloutStatus = sh(
-                        script: "kubectl rollout status deployment/restaurant-deployment -n ${KUBE_NAMESPACE}",
+                        script: "kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}",
                         returnStdout: true
                     ).trim()
 
@@ -125,7 +112,7 @@ spec:
 
                     // Post-deployment email
                     emailext (
-                        subject: "Deployment Complete: restaurant:${BUILD_NUMBER}",
+                        subject: "Deployment Complete: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
                         body:    "Deployment finished successfully.\n\nRollout Status:\n${rolloutStatus}",
                         to:      "${RECIPIENTS}"
                     )
