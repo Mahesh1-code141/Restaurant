@@ -1,11 +1,10 @@
-kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: restaurant-deployment
   namespace: mahesh
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: restaurant
@@ -15,10 +14,10 @@ spec:
         app: restaurant
     spec:
       containers:
-      - name: restaurant
-        image: docker.io/mahesh2452/restaurant:latest
-        ports:
-        - containerPort: 80
+        - name: restaurant
+          image: docker.io/mahesh2452/restaurant:latest
+          ports:
+            - containerPort: 80
 ---
 apiVersion: v1
 kind: Service
