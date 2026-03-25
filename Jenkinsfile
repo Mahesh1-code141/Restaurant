@@ -1,18 +1,21 @@
 pipeline {
     agent any
+
     environment {
         RECIPIENTS          = 'maheshbabuyarramsetti09@gmail.com'
         GIT_REPO            = 'https://github.com/Mahesh1-code141/Restaurant.git'
         GIT_BRANCH          = 'main'
         KUBE_NAMESPACE      = 'mahesh'
-        DOCKER_REGISTRY     = 'docker.io/mahesh2452/restaurant'  // image path
-        DOCKER_LOGIN_SERVER = 'docker.io'                         // login target
+        DOCKER_REGISTRY     = 'docker.io/mahesh2452/restaurant'  // full image path
+        DOCKER_LOGIN_SERVER = 'docker.io'
         DOCKER_IMAGE        = 'restaurant'
         DOCKER_CREDENTIALS_ID = 'Docker_CRED'
     }
+
     triggers {
         githubPush()
     }
+
     stages {
 
         stage('Checkout') {
@@ -25,7 +28,6 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Building Docker image...'
-                // Use double-quotes so $BUILD_NUMBER is expanded by Groovy
                 sh "docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} ."
             }
         }
@@ -55,8 +57,7 @@ pipeline {
             steps {
                 emailext (
                     subject: "Deployment Starting: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
-                    body:    "Deployment of ${DOCKER_IMAGE}:${BUILD_NUMBER} to " +
-                             "Kubernetes namespace '${KUBE_NAMESPACE}' is starting.",
+                    body:    "Deployment of ${DOCKER_IMAGE}:${BUILD_NUMBER} to Kubernetes namespace '${KUBE_NAMESPACE}' is starting.",
                     to:      "${RECIPIENTS}"
                 )
             }
@@ -64,30 +65,34 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                echo 'Deploying to Kubernetes...'
                 script {
-                    // Set image — let this fail the build if it errors
+                    echo 'Deploying to Kubernetes...'
+
+                    // Create deployment if it doesn't exist
+                    sh """
+                        kubectl get deployment ${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE} || \
+                        kubectl apply -f k8s-deployment.yaml -n ${KUBE_NAMESPACE}
+                    """
+
+                    // Update image
                     sh """
                         kubectl set image deployment/${DOCKER_IMAGE}-deployment \
                             ${DOCKER_IMAGE}=${DOCKER_REGISTRY}:${BUILD_NUMBER} \
                             -n ${KUBE_NAMESPACE}
                     """
 
-                    // Capture rollout status separately
+                    // Wait for rollout and capture status
                     def rolloutStatus = sh(
-                        script: """
-                            kubectl rollout status deployment/${DOCKER_IMAGE}-deployment \
-                                -n ${KUBE_NAMESPACE}
-                        """,
+                        script: "kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}",
                         returnStdout: true
                     ).trim()
 
                     echo "Rollout Status: ${rolloutStatus}"
 
+                    // Post-deployment email
                     emailext (
                         subject: "Deployment Complete: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
-                        body:    "Deployment finished successfully.\n\n" +
-                                 "Rollout Status:\n${rolloutStatus}",
+                        body:    "Deployment finished successfully.\n\nRollout Status:\n${rolloutStatus}",
                         to:      "${RECIPIENTS}"
                     )
                 }
@@ -102,16 +107,14 @@ pipeline {
         failure {
             emailext (
                 subject: "Jenkins Job '${env.JOB_NAME}' Failed",
-                body:    "Alert! Job '${env.JOB_NAME}' (#${env.BUILD_NUMBER}) failed.\n\n" +
-                         "Check console output at ${env.BUILD_URL}",
+                body:    "Alert! Job '${env.JOB_NAME}' (#${env.BUILD_NUMBER}) failed.\n\nCheck console output at ${env.BUILD_URL}",
                 to:      "${RECIPIENTS}"
             )
         }
         unstable {
             emailext (
                 subject: "Jenkins Job '${env.JOB_NAME}' Unstable",
-                body:    "Job '${env.JOB_NAME}' (#${env.BUILD_NUMBER}) is unstable.\n\n" +
-                         "Check console output at ${env.BUILD_URL}",
+                body:    "Job '${env.JOB_NAME}' (#${env.BUILD_NUMBER}) is unstable.\n\nCheck console output at ${env.BUILD_URL}",
                 to:      "${RECIPIENTS}"
             )
         }
