@@ -1,3 +1,4 @@
+cat <<EOF | kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +18,8 @@ spec:
       - name: restaurant
         image: docker.io/mahesh2452/restaurant:latest
         ports:
-        - containerPort: 80 
+        - containerPort: 80
+EOF
 ---
 apiVersion: v1
 kind: Service
