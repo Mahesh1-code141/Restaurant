@@ -1,9 +1,11 @@
+cat <<EOF | sudo -u jenkins kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: restaurant       
+  name: restaurant-deployment
+  namespace: mahesh
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: restaurant
@@ -14,9 +16,9 @@ spec:
     spec:
       containers:
       - name: restaurant
-        image: mahesh2452/restaurant:latest
+        image: docker.io/mahesh2452/restaurant:latest
         ports:
-        - containerPort: 80   
+        - containerPort: 80 
 ---
 apiVersion: v1
 kind: Service
