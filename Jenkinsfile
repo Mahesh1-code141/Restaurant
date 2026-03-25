@@ -8,14 +8,11 @@ pipeline {
         KUBE_NAMESPACE = 'mahesh'
         DOCKER_REGISTRY = 'myregistry.com'
         DOCKER_IMAGE = 'restaurant'
-        DOCKER_CREDENTIALS_ID = 'Docker_CRED' // Jenkins stored credentials
+        DOCKER_CREDENTIALS_ID = 'Docker_CRED'
     }
 
     triggers {
-        // Trigger on GitHub push events
         githubPush()
-        // Optional: poll every 5 minutes if webhook not available
-        // pollSCM('H/5 * * * *')
     }
 
     stages {
@@ -46,24 +43,42 @@ pipeline {
             }
         }
 
+        stage('Pre-Deployment Notification') {
+            steps {
+                emailext (
+                    subject: "Deployment Starting: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
+                    body: "Deployment of ${DOCKER_IMAGE}:${BUILD_NUMBER} to Kubernetes namespace ${KUBE_NAMESPACE} is starting.",
+                    to: "${RECIPIENTS}"
+                )
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
                 echo 'Deploying to Kubernetes...'
-                sh """
-                    kubectl set image deployment/${DOCKER_IMAGE}-deployment ${DOCKER_IMAGE}=${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE}
-                    kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}
-                """
+                script {
+                    def rolloutStatus = sh(
+                        script: """
+                            kubectl set image deployment/${DOCKER_IMAGE}-deployment ${DOCKER_IMAGE}=${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE}
+                            kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    // Post-deployment email
+                    emailext (
+                        subject: "Deployment Complete: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
+                        body: "Deployment finished successfully.\n\nRollout Status:\n${rolloutStatus}",
+                        to: "${RECIPIENTS}"
+                    )
+                }
             }
         }
     }
 
     post {
         success {
-            emailext (
-                subject: "Jenkins Job '${env.JOB_NAME}' Success",
-                body: "Good news! Job '${env.JOB_NAME}' (#${env.BUILD_NUMBER}) succeeded.\n\nCheck console output at ${env.BUILD_URL}",
-                to: "${RECIPIENTS}"
-            )
+            echo "Pipeline completed successfully."
         }
         failure {
             emailext (
