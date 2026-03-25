@@ -1,4 +1,3 @@
-cat <<EOF | sudo -u jenkins kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
