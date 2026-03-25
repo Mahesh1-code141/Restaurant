@@ -5,8 +5,10 @@ pipeline {
         RECIPIENTS = 'maheshbabuya@gmail.com'
         GIT_REPO = 'https://github.com/Mahesh1-code141/Restaurant.git'
         GIT_BRANCH = 'main'
-        KUBE_CONFIG = '/home/jenkins/.kube/config' // path to kubeconfig on Jenkins agent
         KUBE_NAMESPACE = 'mahesh'
+        DOCKER_REGISTRY = 'myregistry.com'
+        DOCKER_IMAGE = 'restaurant'
+        DOCKER_CREDENTIALS_ID = 'Docker_CRED' // Jenkins stored credentials
     }
 
     stages {
@@ -17,32 +19,33 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build Docker Image') {
             steps {
-                echo 'Building the application...'
-                // Example: if it's a Dockerized app
-                sh 'docker build -t myapp:${BUILD_NUMBER} .'
+                echo 'Building Docker image...'
+                sh 'docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .'
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Login & Push Docker Image') {
             steps {
-                echo 'Pushing Docker image to registry...'
-                // Replace with your registry details
-                sh 'docker tag myapp:${BUILD_NUMBER} myregistry.com/myapp:${BUILD_NUMBER}'
-                sh 'docker push myregistry.com/myapp:${BUILD_NUMBER}'
+                echo 'Logging into Docker registry and pushing image...'
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login ${DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
+                        docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_NUMBER}
+                        docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_NUMBER}
+                    '''
+                }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
                 echo 'Deploying to Kubernetes...'
-                withKubeConfig([credentialsId: 'kube-credentials', serverUrl: '', namespace: "${KUBE_NAMESPACE}"]) {
-                    sh """
-                    kubectl set image deployment/myapp-deployment myapp=myregistry.com/myapp:${BUILD_NUMBER} -n ${KUBE_NAMESPACE}
-                    kubectl rollout status deployment/myapp-deployment -n ${KUBE_NAMESPACE}
-                    """
-                }
+                sh """
+                    kubectl set image deployment/${DOCKER_IMAGE}-deployment ${DOCKER_IMAGE}=${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_NUMBER} -n ${KUBE_NAMESPACE}
+                    kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}
+                """
             }
         }
     }
