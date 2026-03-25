@@ -68,13 +68,34 @@ pipeline {
                 script {
                     echo 'Deploying to Kubernetes...'
 
-                    // Create deployment if it doesn't exist
+                    // Check if deployment exists; if not, create dynamically
                     sh """
                         kubectl get deployment ${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE} || \
-                        kubectl apply -f k8s-deployment.yaml -n ${KUBE_NAMESPACE}
+                        kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${DOCKER_IMAGE}-deployment
+  namespace: ${KUBE_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${DOCKER_IMAGE}
+  template:
+    metadata:
+      labels:
+        app: ${DOCKER_IMAGE}
+    spec:
+      containers:
+      - name: ${DOCKER_IMAGE}
+        image: ${DOCKER_REGISTRY}:${BUILD_NUMBER}
+        ports:
+        - containerPort: 80
+EOF
                     """
 
-                    // Update image
+                    // Update image in case deployment already existed
                     sh """
                         kubectl set image deployment/${DOCKER_IMAGE}-deployment \
                             ${DOCKER_IMAGE}=${DOCKER_REGISTRY}:${BUILD_NUMBER} \
