@@ -11,6 +11,13 @@ pipeline {
         DOCKER_CREDENTIALS_ID = 'Docker_CRED' // Jenkins stored credentials
     }
 
+    triggers {
+        // Trigger on GitHub push events
+        githubPush()
+        // Optional: poll every 5 minutes if webhook not available
+        // pollSCM('H/5 * * * *')
+    }
+
     stages {
         stage('Checkout') {
             steps {
