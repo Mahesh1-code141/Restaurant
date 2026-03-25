@@ -2,13 +2,12 @@ pipeline {
     agent any
 
     environment {
-        RECIPIENTS          = 'maheshbabuyarramsetti09@gmail.com'
-        GIT_REPO            = 'https://github.com/Mahesh1-code141/Restaurant.git'
-        GIT_BRANCH          = 'main'
-        KUBE_NAMESPACE      = 'mahesh'
-        DOCKER_REGISTRY     = 'docker.io/mahesh2452/restaurant'  // full image path
-        DOCKER_LOGIN_SERVER = 'docker.io'
-        DOCKER_IMAGE        = 'restaurant'
+        RECIPIENTS            = 'maheshbabuyarramsetti09@gmail.com'
+        GIT_REPO              = 'https://github.com/Mahesh1-code141/Restaurant.git'
+        GIT_BRANCH            = 'main'
+        KUBE_NAMESPACE        = 'mahesh'
+        DOCKER_IMAGE          = 'mahesh2452/restaurant'
+        DOCKER_LOGIN_SERVER   = 'docker.io'
         DOCKER_CREDENTIALS_ID = 'Docker_CRED'
     }
 
@@ -28,7 +27,10 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Building Docker image...'
-                sh "docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} ."
+                sh """
+                    docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                    docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                """
             }
         }
 
@@ -42,12 +44,10 @@ pipeline {
                 )]) {
                     sh """
                         echo "\$DOCKER_PASS" | docker login ${DOCKER_LOGIN_SERVER} \
-                            -u "\$DOCKER_USER" --password-stdin
+                        -u "\$DOCKER_USER" --password-stdin
 
-                        docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} \
-                            ${DOCKER_REGISTRY}:${BUILD_NUMBER}
-
-                        docker push ${DOCKER_REGISTRY}:${BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE}:latest
                     """
                 }
             }
@@ -57,39 +57,39 @@ pipeline {
             steps {
                 emailext (
                     subject: "Deployment Starting: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
-                    body:    "Deployment of ${DOCKER_IMAGE}:${BUILD_NUMBER} to Kubernetes namespace '${KUBE_NAMESPACE}' is starting.",
-                    to:      "${RECIPIENTS}"
+                    body: "Deployment started for image ${DOCKER_IMAGE}:${BUILD_NUMBER} to namespace ${KUBE_NAMESPACE}.",
+                    to: "${RECIPIENTS}"
                 )
             }
         }
 
-       stage('Deploy to Kubernetes') {
-    steps {
-        script {
-            echo 'Deploying to Kubernetes...'
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    echo 'Deploying to Kubernetes...'
 
-            sh """
-                kubectl get namespace ${KUBE_NAMESPACE} || kubectl create namespace ${KUBE_NAMESPACE}
+                    sh """
+                        kubectl get namespace ${KUBE_NAMESPACE} || kubectl create namespace ${KUBE_NAMESPACE}
 
-                kubectl apply -f - <<EOF
+                        kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${DOCKER_IMAGE}-deployment
+  name: restaurant-deployment
   namespace: ${KUBE_NAMESPACE}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${DOCKER_IMAGE}
+      app: restaurant
   template:
     metadata:
       labels:
-        app: ${DOCKER_IMAGE}
+        app: restaurant
     spec:
       containers:
-      - name: ${DOCKER_IMAGE}
-        image: ${DOCKER_REGISTRY}:${BUILD_NUMBER}
+      - name: restaurant
+        image: ${DOCKER_IMAGE}:${BUILD_NUMBER}
         imagePullPolicy: Always
         ports:
         - containerPort: 80
@@ -97,20 +97,58 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ${DOCKER_IMAGE}-service
+  name: restaurant-service
   namespace: ${KUBE_NAMESPACE}
 spec:
   type: NodePort
   selector:
-    app: ${DOCKER_IMAGE}
+    app: restaurant
   ports:
     - port: 80
       targetPort: 80
       nodePort: 30007
 EOF
-            """
+                    """
 
-            sh "kubectl rollout status deployment/${DOCKER_IMAGE}-deployment -n ${KUBE_NAMESPACE}"
+                    // Rollout with timeout
+                    timeout(time: 2, unit: 'MINUTES') {
+                        sh "kubectl rollout status deployment/restaurant-deployment -n ${KUBE_NAMESPACE}"
+                    }
+
+                    echo "Deployment successful!"
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            emailext (
+                subject: "✅ Deployment Successful: ${env.JOB_NAME}",
+                body: "Deployment completed successfully!\n\nImage: ${DOCKER_IMAGE}:${BUILD_NUMBER}",
+                to: "${RECIPIENTS}"
+            )
+        }
+
+        failure {
+            script {
+                echo "Deployment failed! Rolling back..."
+
+                sh """
+                    kubectl rollout undo deployment/restaurant-deployment -n ${KUBE_NAMESPACE} || true
+                """
+            }
+
+            emailext (
+                subject: "❌ Deployment Failed: ${env.JOB_NAME}",
+                body: "Deployment failed for build #${env.BUILD_NUMBER}.\nRollback attempted.\nCheck logs: ${env.BUILD_URL}",
+                to: "${RECIPIENTS}"
+            )
+        }
+
+        always {
+            echo "Cleaning up Docker images..."
+            sh "docker system prune -af || true"
         }
     }
 }
