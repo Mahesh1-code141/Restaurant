@@ -100,13 +100,12 @@ metadata:
   name: restaurant-service
   namespace: ${KUBE_NAMESPACE}
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: restaurant
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30007
 EOF
                     """
 
